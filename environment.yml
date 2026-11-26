@@ -1,0 +1,51 @@
+# Conda environment for PERM.
+#
+#   conda env create -f environment.yml
+#   conda activate perm
+#
+# Versions are pinned to the environment the published results were produced in
+# (Linux, Nov 2026). Pinned rather than left open because the analysis is
+# numerical: a different numpy or pandas can move the last digits of a
+# responsiveness estimate, and a different scanpy can change what a pseudobulk
+# contains.
+#
+# Every package here is imported by the code in this repository. The environment
+# the results were produced in also carried harmonypy, leidenalg, loompy, gdown,
+# datasets, pybiomart and entrez-direct, which earlier exploratory work used and
+# the published code does not; they are left out deliberately.
+#
+# Two packages come from PyPI. mygene resolves Ensembl ids to gene symbols for the
+# Xu and Weinstock screens, and only on a first run: both cache the result, so a
+# run from a cached map needs no network. scikit-misc provides the loess fit in the
+# GEMLI port (src/memory_genes/utils.py imports it at the top, so every script that
+# imports utils needs it, Power-Seek included).
+name: perm
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10.20
+  # core numerics
+  - numpy=2.2.6
+  - pandas=2.3.3
+  - scipy=1.15.2
+  - statsmodels=0.14.6
+  - scikit-learn=1.7.2
+  # single-cell
+  - anndata=0.11.4
+  - scanpy=1.11.5
+  - h5py=3.16.0
+  # plotting
+  - matplotlib=3.10.9
+  - seaborn=0.13.2
+  - matplotlib-venn=1.1.2
+  - upsetplot=0.9.0
+  # utilities
+  - tqdm=4.67.3
+  - requests=2.34.2
+  - huggingface_hub=0.25.1
+  # to run the figure notebooks
+  - ipykernel=7.2.0
+  - pip
+  - pip:
+      - mygene==3.2.2
+      - scikit-misc==0.5.2

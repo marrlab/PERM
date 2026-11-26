@@ -1,0 +1,13 @@
+# Copy to paths.local.sh (gitignored), fill in your own locations, then
+#   source paths.local.sh
+# before running any script or notebook. Every variable is optional: anything left
+# unset falls back to the default in perm_paths.py (a folder inside the repository).
+
+export PERM_DATA=/path/to/data                   # processed h5ads, LFC tables, annotations
+export PERM_RAW=/path/to/raw                     # raw screen downloads (datasets.tsv paths)
+export PERM_PROJECT_DATA=/path/to/data/reference # bulk MemorySeq and other reference tables
+export PERM_MEMGENES_ROOT=/path/to/memory_genes  # per-method memory-gene lists, gene_lists/
+export PERM_OUTPUTS=/path/to/outputs             # result tables
+export PERM_PLOTS=/path/to/plots                 # diagnostic plots
+export PERM_SCRATCH=/path/to/scratch             # large intermediates
+export PERM_FEATURES=/path/to/gene_features      # precomputed per-gene feature matrices
