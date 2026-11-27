@@ -11,3 +11,4 @@ export PERM_OUTPUTS=/path/to/outputs             # result tables
 export PERM_PLOTS=/path/to/plots                 # diagnostic plots
 export PERM_SCRATCH=/path/to/scratch             # large intermediates
 export PERM_FEATURES=/path/to/gene_features      # precomputed per-gene feature matrices
+export PERM_BOX=/path/to/box_figure             # precomputed tables for Supplementary Fig. 8

@@ -23,9 +23,6 @@ one alone leaves an artefact. Everything below is matched on both, and the
 UNMATCHED number is reported next to the matched one so the size of the confound
 is visible rather than taken on trust.
 
-`marson_KO.compare_ko_effect_groups` and `compare_top_scg_effect` match NEITHER
-covariate. Do not use them for this question.
-
 THREE FILTERS THAT ARE EASY TO CONFLATE
 ---------------------------------------
 1. readout floor : which COLUMNS enter the per-KO summary (genes measured well
@@ -203,47 +200,6 @@ def ko_stats(M, cols=None):
         mean = np.nanmean(a, axis=1)
     return pd.DataFrame(dict(median_abs_lfc=med, mean_abs_lfc=mean,
                              n_readout=np.isfinite(a).sum(axis=1)), index=M.index)
-
-
-def _unused_per_ko_effect(lfc_path, readout_genes, chunksize=400, verbose=True):
-    """Superseded by load_abs_lfc + ko_stats; kept only so the streaming variant
-    is still on record if a matrix ever gets too big to hold."""
-    head = pd.read_csv(lfc_path, index_col=0, nrows=0)
-    cols = [c for c in head.columns if c in readout_genes]
-    if not cols:
-        raise ValueError(f"no readout gene of {lfc_path} passed the floor")
-    if verbose:
-        print(f"  readout genes: {len(cols)} of {head.shape[1]} above the floor")
-
-    idx, med, mean, n_ok = [], [], [], []
-    seen_self = [0, 0]                      # [checked, NaN]
-    for chunk in pd.read_csv(lfc_path, index_col=0, chunksize=chunksize):
-        sub = chunk[cols]
-        for ko in sub.index:                # self-KO must not score itself
-            if ko in sub.columns:
-                seen_self[0] += 1
-                seen_self[1] += int(pd.isna(sub.at[ko, ko]))
-        a = np.abs(sub.to_numpy(dtype=float))
-        with np.errstate(invalid="ignore"):
-            med.append(np.nanmedian(a, axis=1))
-            mean.append(np.nanmean(a, axis=1))
-        n_ok.append(np.isfinite(a).sum(axis=1))
-        idx.append(sub.index.to_numpy())
-
-    out = pd.DataFrame(
-        dict(median_abs_lfc=np.concatenate(med),
-             mean_abs_lfc=np.concatenate(mean),
-             n_readout=np.concatenate(n_ok)),
-        index=pd.Index(np.concatenate(idx), name="ko"))
-    if seen_self[0]:
-        frac = seen_self[1] / seen_self[0]
-        if verbose:
-            print(f"  self-KO masked: {seen_self[1]}/{seen_self[0]} ({frac:.1%})")
-        if frac < 0.99:
-            raise ValueError(
-                f"{lfc_path}: only {frac:.1%} of self-KO entries are NaN — the "
-                "target's own knockdown would count towards its own score")
-    return out
 
 
 def memory_sets(memdir, files, top_n, universe):

@@ -10,30 +10,23 @@ This module matches on any number of covariates by nearest-neighbour sampling in
 rank-standardised covariate space, and — the part that matters — reports how well
 the match actually balanced, so a failed match is visible instead of silent.
 
-Typical use (Fig 2d, the "what survives" ladder):
+Typical use (one rung of the Fig. 2f matching panels):
 
-    from matching import matched_comparison, matching_ladder
+    from matching import matched_comparison
 
-    cov = pd.read_csv(f'{P.DATA}/marson/marson_gene_covariates.csv',
-                      index_col=0)
-    cov['expr'] = gene_expr                      # the existing baseline expression
+    cov = pd.read_csv(f'{P.DATA}/marson/marson_gene_covariates.csv', index_col=0)
+    cov['expr'] = gene_expr                      # the baseline expression
+    res = matched_comparison(gene_summary, cov, memory_genes, background,
+                             match_on=['expr', 'detection_rate'])
 
-    lad = matching_ladder(
-        gene_summary, cov, memory_genes, background,
-        steps={'expression':            ['expr'],
-               '+ detection':           ['expr', 'detection_rate'],
-               '+ dispersion':          ['expr', 'disp_resid'],
-               'all three':             ['expr', 'detection_rate', 'disp_resid']},
-        metric='median_abs_lfc')
-
-The output has one row per step with Cliff's delta + CI, the ratio, and the worst
-post-match standardised mean difference across covariates.
+The result carries Cliff's delta + CI, the ratio, and the worst post-match
+standardised mean difference across covariates.
 
 INTERPRETATION WARNING, keep it attached to the figure. Matching on a covariate is
 only a confound control if the covariate is not itself part of what "memory gene"
 means. Between-clone variability is arguably constitutive of memory, so matching on
 dispersion may be over-adjustment rather than control -- the same argument that
-applies to lineage restriction. Report the ladder, do not silently pick the most
+applies to lineage restriction. Report every rung, do not silently pick the most
 conservative rung.
 """
 
@@ -163,121 +156,3 @@ def matched_comparison(gene_summary, covariates, memory_genes, background,
                 ratio=float(np.median(mem_vals) / np.median(bg_vals)),
                 memory_genes=list(mem), matched_genes=last, match_on=match_on)
 
-
-def matching_ladder(gene_summary, covariates, memory_genes, background, steps,
-                    metric='median_abs_lfc', n_iter=20, k=10, random_seed=0):
-    """Run matched_comparison once per step; return one tidy row per step.
-
-    `steps` is an ordered {label: [covariate names]} mapping. The point of the
-    ladder is the TREND across rungs, not any single rung.
-    """
-    out = []
-    for label, cols in steps.items():
-        r = matched_comparison(gene_summary, covariates, memory_genes, background,
-                               match_on=cols, metric=metric, n_iter=n_iter, k=k,
-                               random_seed=random_seed)
-        out.append(dict(step=label, matched_on=', '.join(cols), n=r['n_scg'],
-                        mem=float(np.median(r['scg_values'])),
-                        bg=float(np.median(r['non_scg_values'])),
-                        ratio=r['ratio'], cliffs_d=r['cliffs_d'],
-                        d_lo=r['d_lo'], d_hi=r['d_hi'], p=r['mann_whitney_p'],
-                        worst_smd=float(r['balance'].smd_after.abs().max())))
-    return pd.DataFrame(out)
-
-
-def win_rate(delta):
-    """Cliff's delta as the plain-English quantity people actually understand:
-    the share of random memory-vs-background pairings the memory gene wins."""
-    return (delta + 1) / 2
-
-
-def plot_rung(result, covariates, gene_summary, metric='median_abs_lfc',
-              title=None, ref_delta=None, savefig=None):
-    """One self-contained figure for a single matching rung.
-
-    Left panels  : each matched covariate, memory vs its matched partners. These
-                   should overlap almost completely -- that IS the evidence the
-                   match worked, and it belongs in the figure rather than in a
-                   number the reader has to trust.
-    Right panel  : the responsiveness distributions, i.e. the difference that
-                   survives after those covariates were equalised.
-
-    ref_delta : optional delta from the expression-only rung, drawn as a reference
-                so the reader can see how much this covariate removed.
-    """
-    import matplotlib.pyplot as plt
-
-    mem, bg = result['memory_genes'], list(result['matched_genes'])
-    cols = list(result['match_on'])
-    n = len(cols) + 1
-
-    fig, axes = plt.subplots(1, n, figsize=(3.1 * n + 1, 4.6))
-    axes = np.atleast_1d(axes)
-
-    def _box(ax, a, b, ylabel, log=False):
-        ax.boxplot([a, b], widths=.55, showfliers=False,
-                   medianprops=dict(color='k', lw=1.6))
-        for i, (v, col) in enumerate(((a, 'crimson'), (b, 'steelblue')), start=1):
-            jit = np.random.default_rng(0).normal(i, .055, len(v))
-            ax.scatter(jit, v, s=4, alpha=.18, color=col, linewidths=0)
-        ax.set_xticks([1, 2]); ax.set_xticklabels(['memory', 'matched\nbackground'])
-        ax.set_ylabel(ylabel)
-        if log:
-            ax.set_yscale('log')
-
-    for j, c in enumerate(cols):
-        v = covariates[c]
-        _box(axes[j], v.loc[mem].dropna().to_numpy(), v.loc[bg].dropna().to_numpy(),
-             c, log=(c == 'expr'))
-        smd = result['balance'].loc[c, 'smd_after']
-        axes[j].set_title(f"{c}\nmatched  (SMD {smd:+.3f})", fontsize=10)
-
-    v = gene_summary[metric]
-    _box(axes[-1], v.loc[mem].dropna().to_numpy(), v.loc[bg].dropna().to_numpy(),
-         metric.replace('_', ' '))
-    d, lo, hi = result['cliffs_d'], result['d_lo'], result['d_hi']
-    axes[-1].set_title(f"responsiveness\ndelta {d:+.3f} [{lo:+.3f}, {hi:+.3f}]", fontsize=10)
-
-    sub = (f"memory gene more responsive in {win_rate(d):.0%} of random pairings"
-           "   (50% = no effect)")
-    if ref_delta is not None:
-        sub += f"\nexpression-only rung was {ref_delta:+.3f} "\
-               f"({win_rate(ref_delta):.0%})  ->  this rung removes "\
-               f"{100 * (1 - d / ref_delta):.0f}% of the effect"
-    fig.suptitle((title or 'matched comparison') + f"\n{sub}", fontsize=12)
-    plt.tight_layout()
-    if savefig:
-        plt.savefig(savefig, dpi=150, bbox_inches='tight')
-    return fig
-
-
-def plot_ladder(ladder, ax=None, title=None, smd_warn=0.10):
-    """Cliff's delta with CI per rung. Rungs whose match failed are marked.
-
-    smd_warn : a rung with |SMD| above this after matching is not actually matched;
-               it is drawn hollow so it cannot be read as a controlled result.
-    """
-    import matplotlib.pyplot as plt
-    if ax is None:
-        _, ax = plt.subplots(figsize=(1.9 * len(ladder) + 3, 5))
-
-    x = np.arange(len(ladder))
-    bad = ladder.worst_smd.abs() > smd_warn
-    ax.errorbar(x[~bad], ladder.cliffs_d[~bad],
-                yerr=[(ladder.cliffs_d - ladder.d_lo)[~bad],
-                      (ladder.d_hi - ladder.cliffs_d)[~bad]],
-                fmt='o', color='crimson', capsize=5, markersize=9, label='matched')
-    if bad.any():
-        ax.errorbar(x[bad], ladder.cliffs_d[bad],
-                    yerr=[(ladder.cliffs_d - ladder.d_lo)[bad],
-                          (ladder.d_hi - ladder.cliffs_d)[bad]],
-                    fmt='o', mfc='white', color='crimson', capsize=5, markersize=9,
-                    label=f'imbalanced (|SMD| > {smd_warn})')
-
-    ax.axhline(0, color='k', lw=.8)
-    ax.set_xticks(x)
-    ax.set_xticklabels(ladder.step, rotation=20, ha='right')
-    ax.set_ylabel("Cliff's delta  (memory vs matched background)")
-    ax.set_title(title or 'Effect size under progressively stricter matching')
-    ax.legend(frameon=False)
-    return ax
